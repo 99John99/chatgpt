@@ -14,9 +14,10 @@ export function validate(config, action, confirmed) {
   }
 }
 
-export async function execute(page, config, action, confirmed) {
+export async function execute(page, config, action, confirmed, credentials = {}, navigate) {
   validate(config, action, confirmed);
-  await page.goto(config.url, { waitUntil: 'domcontentloaded' });
+  if (navigate) await navigate(page, config.url, credentials);
+  else await page.goto(config.url, { waitUntil: 'domcontentloaded' });
   await page.locator(config.authenticatedSelector).waitFor({ state: 'visible', timeout: 30000 });
   if (new URL(page.url()).origin !== ORIGIN) throw new Error('LOGIN_REQUIRED');
   if (action === 'inspect') return 'ACCESS_CONFIRMED';
@@ -26,6 +27,14 @@ export async function execute(page, config, action, confirmed) {
   const button = page.locator(target.buttonSelector);
   if (await button.count() !== 1 || !await button.isVisible() || !await button.isEnabled()) {
     throw new Error('BUTTON_UNAVAILABLE');
+  }
+  if (config.emailSelector || config.passwordSelector) {
+    if (!config.emailSelector || !config.passwordSelector || !credentials.email || !credentials.password) {
+      throw new Error('CREDENTIALS_REQUIRED');
+    }
+    if (new URL(page.url()).origin !== ORIGIN) throw new Error('LOGIN_REQUIRED');
+    await page.locator(config.emailSelector).fill(credentials.email);
+    await page.locator(config.passwordSelector).fill(credentials.password);
   }
   // Exactly one attempt. A timeout can mean the server received the click.
   await button.click({ timeout: 15000 });

@@ -1,59 +1,53 @@
-# GAIO: ejecución desde GitHub Actions
+# GAIO desde GitHub Actions
 
-Base de Playwright para comprobar acceso y ejecutar Check In/Check Out bajo demanda desde la nube.
+Automatización manual de acceso y asistencia con Playwright.
 
-**Estado: preparación inicial. No está activa ni validada contra una cuenta de GAIO.** Faltan el inicio de sesión, los selectores reales de la interfaz y una prueba de acceso desde GitHub. No hay horarios programados.
+## Estado actual
 
-## 1. Preparar la sesión (Windows / PowerShell)
+Se verificó en un navegador cloud el recorrido real: GAIO → Microsoft → SSO de Movate/CSS Corp → formulario de asistencia. El formulario vuelve a solicitar correo y contraseña y ofrece Check IN / Check Out. No se pulsó ninguno de esos botones.
 
-Instala Node.js 24 LTS y descarga este repositorio. Abre PowerShell en la carpeta descargada:
+La prueba `inspect` está preparada. Las marcaciones siguen bloqueadas (`verified: false`) hasta identificar el mensaje o indicador real de éxito de cada acción. Todavía no se ha probado con credenciales en GitHub Actions ni se han configurado horarios.
 
-```powershell
-npm ci
-npx playwright install chromium
-npm run login
-```
+## Siguiente paso: dos secretos
 
-Completa el login empresarial y MFA en el navegador que se abre. Navega hasta asistencia sin pulsar los botones y vuelve a PowerShell para presionar Enter. Esto crea `.auth/session.txt` y un informe local `.auth/controls.json`.
+En este repositorio abre **Settings → Secrets and variables → Actions → New repository secret** y crea:
 
-No pongas contraseñas en código. **El archivo de sesión permite acceder a tu cuenta: no lo compartas en chats, commits ni issues.** Está excluido de git. El informe de controles también es privado y local. La compresión del archivo de sesión NO es cifrado.
+| Nombre | Valor |
+|---|---|
+| `GAIO_EMAIL` | Tu correo empresarial |
+| `GAIO_PASSWORD` | Tu contraseña empresarial |
 
-## 2. Configurar la pantalla real
+Introduce los valores únicamente en los campos de secretos de GitHub. No los publiques como archivos, variables normales, issues o mensajes de chat. La sesión usada para inspeccionar el sitio en ChatGPT no se transfiere a GitHub.
 
-Edita `gaio.config.json` después de observar GAIO:
+## Probar sin marcar
 
-- `url`: URL de la sección de asistencia dentro de `https://gaio.movate.com`.
-- `authenticatedSelector`: elemento único que solo aparece después de iniciar sesión.
-- `buttonSelector`: selector exacto del botón de cada acción.
-- `successSelector`: indicador que está oculto antes de esa acción y visible después; debe identificar el estado actual, no un registro antiguo.
-- `verified`: pasa a `true` solo después de revisar esos selectores. No adivines nombres.
+Abre **Actions → GAIO → Run workflow**, elige `inspect` y deja la confirmación desmarcada.
 
-Los selectores vacíos bloquean la ejecución. Si hay iframes, formularios intermedios, confirmaciones, ubicación o diálogos, hace falta adaptar el código antes de usarlo.
+La prueba inicia sesión a través de las pantallas observadas y comprueba que aparezcan los dos campos y ambos botones. No envía el formulario de asistencia. `ACCESS_CONFIRMED` significa que llegó al formulario, no que haya registrado una entrada o salida ni que haya validado la contraseña contra el formulario final.
 
-## 3. Guardar el secreto de GitHub
+Si Microsoft introduce MFA, consentimiento, selección de cuenta u otra pantalla nueva, la ejecución se detiene. No acepta esos pasos automáticamente. Un login fallido no se reintenta.
 
-Abre Settings → Secrets and variables → Actions → New repository secret. Nombre: `GAIO_SESSION`. Valor: el contenido de `.auth/session.txt`. Puedes copiarlo al portapapeles desde PowerShell:
+## Completar la verificación de marcaciones
 
-```powershell
-Get-Content -Raw .auth/session.txt | Set-Clipboard
-```
+Los identificadores del formulario ya están comprobados: `#txtEmpID`, `#txtpassword`, `#btncheckIn`, `#btncheckOut`.
 
-Pégalo únicamente en el campo de secreto de GitHub. No lo subas como archivo al repositorio. Recomendado: utiliza un repositorio privado y limita quién puede editar workflows; alguien con acceso de escritura podría cambiar el código para leer secretos.
+Falta observar qué aparece después de una marcación normal. Configura en `gaio.config.json` el `successSelector` específico de cada acción, que debe estar oculto antes y visible después. No uses una fecha o registro antiguo. Si el resultado es un diálogo JavaScript, habrá que adaptar el verificador. Solo entonces cambia `verified` a `true`.
 
-## 4. Probar desde la nube
+Después, para una marcación manual desde el teléfono o la computadora: **Actions → GAIO → Run workflow → check-in/check-out** y marca la confirmación. El proceso se ejecuta en GitHub.
 
-Actions → GAIO → Run workflow → `inspect`. Esto no pulsa botones. `ACCESS_CONFIRMED` indica que se encontró el elemento autenticado configurado. Un login local exitoso no garantiza que Microsoft permita reutilizar la sesión desde un runner de GitHub.
+No hay reintentos automáticos. Si falla después del clic, comprueba GAIO antes de repetir: el servidor puede haber recibido la marcación. La comprobación visual reduce duplicados, pero no garantiza idempotencia entre ejecuciones.
 
-Después de validar el flujo real, selecciona `check-in` o `check-out` y marca la confirmación. Puedes hacerlo desde el teléfono; el navegador corre en GitHub, sin necesitar tu PC encendida.
+## Credenciales y límites
 
-No se guardan capturas ni contenido de la página en los logs. La ejecución comprueba el resultado visible y no reintenta si falla. Ante `FAILED_OR_UNCONFIRMED`, revisa GAIO antes de repetir: el clic podría haber sido recibido. La comprobación de estado reduce duplicados, pero no proporciona idempotencia del servidor.
+- No se imprimen credenciales, respuestas completas de la página, capturas ni trazas en los logs.
+- `GAIO_SESSION` es opcional para una sesión previamente exportada; no hace falta para intentar el acceso mediante los dos secretos.
+- `npm run login` sigue disponible como utilidad local opcional. Los archivos `.auth/` quedan excluidos de git.
+- La conexión desde GitHub tendrá la IP del runner; las políticas corporativas pueden tratarla de forma diferente.
+- Los permisos de escritura al repositorio permiten cambiar código que recibe secretos. Limita esos permisos.
+- Faltan acordar días y horas si se desea una programación futura.
 
-## Límites pendientes de validar
+## Desarrollo
 
-- Expiración de sesión: repite el login y reemplaza el secreto cuando haga falta. Este flujo no renueva el secreto automáticamente.
-- MFA, VPN o dispositivo corporativo obligatorio pueden impedir el acceso desde GitHub.
-- La IP de salida será la del runner de GitHub. No se falsifica ubicación ni dispositivo.
-- Si GAIO usa IndexedDB o sessionStorage, se intenta conservarlos; debe comprobarse su portabilidad real.
-- No se han establecido días ni horas. Esta versión se inicia manualmente.
+Node.js 24: `npm ci`, `npx playwright install chromium`, `npm test`. Las pruebas locales verifican las protecciones del código; no certifican acceso desde GitHub ni el resultado real de asistencia.
 
-Documentación: [Playwright authentication](https://playwright.dev/docs/auth), [GitHub manual workflows](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-running-a-workflow).
+Referencias: [Playwright authentication](https://playwright.dev/docs/auth), [GitHub Actions manual workflows](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-running-a-workflow).

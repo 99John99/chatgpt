@@ -34,6 +34,8 @@ jobs:
       - name: Ejecutar acción solicitada
         env:
           GAIO_SESSION: ${{ secrets.GAIO_SESSION }}
+          GAIO_EMAIL: ${{ secrets.GAIO_EMAIL }}
+          GAIO_PASSWORD: ${{ secrets.GAIO_PASSWORD }}
           GAIO_ACTION: ${{ inputs.action }}
           CONFIRM_ACTION: ${{ inputs.confirm }}
         run: node scripts/run.mjs "$GAIO_ACTION"

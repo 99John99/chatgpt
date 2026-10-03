@@ -39,3 +39,15 @@ test('Unconfirmed result is not retried', async () => {
   await assert.rejects(execute(page, config, 'check-in', 'true'));
   assert.equal(page.clicks(), 1);
 });
+test('Attendance form cannot be submitted without credentials', async () => {
+  const page = fakePage();
+  const form = { ...config, emailSelector: '#email', passwordSelector: '#password' };
+  await assert.rejects(execute(page, form, 'check-in', 'true'), /CREDENTIALS_REQUIRED/);
+  assert.equal(page.clicks(), 0);
+});
+test('Inspect with a credential form never fills or submits it', async () => {
+  const page = fakePage();
+  const form = { ...config, emailSelector: '#email', passwordSelector: '#password' };
+  assert.equal(await execute(page, form, 'inspect'), 'ACCESS_CONFIRMED');
+  assert.equal(page.clicks(), 0);
+});
