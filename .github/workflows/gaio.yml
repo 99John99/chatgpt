@@ -1,5 +1,13 @@
 name: GAIO
 on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 8 * * 1-5'
+      timezone: America/Costa_Rica
+    - cron: '0 17 * * 1-5'
+      timezone: America/Costa_Rica
   workflow_dispatch:
     inputs:
       action:
@@ -19,8 +27,18 @@ concurrency:
   group: gaio-attendance
   cancel-in-progress: false
 jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm test
   gaio:
-    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +54,7 @@ jobs:
           GAIO_SESSION: ${{ secrets.GAIO_SESSION }}
           GAIO_EMAIL: ${{ secrets.GAIO_EMAIL }}
           GAIO_PASSWORD: ${{ secrets.GAIO_PASSWORD }}
+          GAIO_CRON: ${{ github.event.schedule }}
           GAIO_ACTION: ${{ inputs.action }}
           CONFIRM_ACTION: ${{ inputs.confirm }}
         run: node scripts/run.mjs "$GAIO_ACTION"

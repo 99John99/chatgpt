@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "timezone": "America/Costa_Rica",
+  "weekdays": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "times": {
+    "check-in": "08:00",
+    "check-out": "17:00"
+  },
+  "excludedDates": [],
+  "excludedRanges": []
+}

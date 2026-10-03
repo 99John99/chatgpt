@@ -1,11 +1,17 @@
 {
   "url": "https://gaio.movate.com/",
-  "verified": false,
   "authenticatedSelector": "#txtEmpID",
   "emailSelector": "#txtEmpID",
   "passwordSelector": "#txtpassword",
   "actions": {
-    "check-in": { "buttonSelector": "#btncheckIn", "successSelector": "" },
-    "check-out": { "buttonSelector": "#btncheckOut", "successSelector": "" }
-  }
+    "check-in": {
+      "buttonSelector": "#btncheckIn"
+    },
+    "check-out": {
+      "buttonSelector": "#btncheckOut"
+    }
+  },
+  "enabled": true,
+  "alertSelector": ".sweet-alert.visible",
+  "alertOkSelector": "#btnokClick"
 }

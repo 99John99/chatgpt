@@ -2,52 +2,71 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execute, validate } from '../scripts/core.mjs';
 
-const config = {
-  url: 'https://gaio.movate.com/', verified: true, authenticatedSelector: '#authenticated',
-  actions: { 'check-in': { buttonSelector: '#in', successSelector: '#done' } }
-};
-test('Blocks unconfirmed, unverified, unknown and foreign-origin actions', () => {
-  assert.throws(() => validate(config, 'check-in', 'false'));
-  assert.throws(() => validate({ ...config, verified: false }, 'check-in', 'true'));
-  assert.throws(() => validate(config, 'anything', 'true'));
-  assert.throws(() => validate({ ...config, url: 'https://example.com' }, 'inspect'));
-});
-function fakePage(alreadyDone = false, failsAfterClick = false) {
-  let clicks = 0;
-  return {
-    clicks: () => clicks, goto: async () => {}, url: () => config.url,
+const config = { url: 'https://gaio.movate.com/', enabled: true, authenticatedSelector: '#email',
+  emailSelector: '#email', passwordSelector: '#password', alertSelector: '.alert', alertOkSelector: '#ok',
+  actions: { 'check-in': { buttonSelector: '#in' }, 'check-out': { buttonSelector: '#out' } } };
+const credentials = { email: 'test@example.com', password: 'fixture-only' };
+function fake({ message = 'A result not seen before', native = false, timeout = false, existing = false } = {}) {
+  const calls = { attendance: 0, ok: 0, fields: 0 };
+  let shown = existing;
+  const handlers = new Map();
+  const page = { calls, goto: async () => {}, url: () => config.url,
+    on: (name, fn) => handlers.set(name, fn), off: name => handlers.delete(name),
     locator: selector => ({
       count: async () => 1, isEnabled: async () => true,
-      isVisible: async () => selector === '#done' ? alreadyDone : true,
-      click: async () => { clicks++; },
-      waitFor: async () => { if (selector === '#done' && failsAfterClick) throw new Error('timeout'); }
+      isVisible: async () => selector === '.alert' ? shown : true,
+      fill: async () => { calls.fields++; },
+      innerText: async () => message,
+      locator: child => page.locator(child),
+      click: async () => {
+        if (selector === '#ok') { calls.ok++; shown = false; return; }
+        calls.attendance++;
+        if (native) await handlers.get('dialog')({ type: () => 'alert', message: () => message, accept: async () => { calls.ok++; } });
+        else shown = true;
+      },
+      waitFor: async ({state}) => {
+        if (selector !== '.alert') return;
+        if (native && state === 'visible') return new Promise(() => {});
+        if (timeout) throw new Error('Timeout');
+        assert.equal(shown, state === 'visible');
+      }
     })
   };
+  return page;
 }
-test('Inspect never clicks', async () => {
-  const page = fakePage();
-  assert.equal(await execute(page, config, 'inspect'), 'ACCESS_CONFIRMED');
-  assert.equal(page.clicks(), 0);
+test('Inspect does not enter attendance credentials or click', async () => {
+  const p = fake();
+  assert.equal(await execute(p,config,'inspect'), 'ACCESS_CONFIRMED');
+  assert.deepEqual(p.calls,{attendance:0,ok:0,fields:0});
 });
-test('Already completed state prevents click', async () => {
-  const page = fakePage(true);
-  await assert.rejects(execute(page, config, 'check-in', 'true'));
-  assert.equal(page.clicks(), 0);
+test('Reject unconfirmed, unknown, disabled or foreign-origin actions', () => {
+  assert.throws(()=>validate(config,'check-in','false'));
+  assert.throws(()=>validate(config,'unknown','true'));
+  assert.throws(()=>validate({...config,enabled:false},'check-in','true'));
+  assert.throws(()=>validate({...config,url:'https://example.com'},'inspect'));
 });
-test('Unconfirmed result is not retried', async () => {
-  const page = fakePage(false, true);
-  await assert.rejects(execute(page, config, 'check-in', 'true'));
-  assert.equal(page.clicks(), 1);
+test('Missing credentials never submits', async () => {
+  const p=fake(); await assert.rejects(execute(p,config,'check-in','true'), /CREDENTIALS_REQUIRED/);
+  assert.equal(p.calls.attendance,0);
 });
-test('Attendance form cannot be submitted without credentials', async () => {
-  const page = fakePage();
-  const form = { ...config, emailSelector: '#email', passwordSelector: '#password' };
-  await assert.rejects(execute(page, form, 'check-in', 'true'), /CREDENTIALS_REQUIRED/);
-  assert.equal(page.clicks(), 0);
+test('Duplicate alert is acknowledged without retrying or claiming a new check-in', async () => {
+  const p=fake({message:'You have already checked IN for today!\nNot valid!'});
+  assert.equal(await execute(p,config,'check-in','true',credentials),'ALREADY_CHECKED_IN');
+  assert.deepEqual(p.calls,{attendance:1,ok:1,fields:2});
 });
-test('Inspect with a credential form never fills or submits it', async () => {
-  const page = fakePage();
-  const form = { ...config, emailSelector: '#email', passwordSelector: '#password' };
-  assert.equal(await execute(page, form, 'inspect'), 'ACCESS_CONFIRMED');
-  assert.equal(page.clicks(), 0);
+test('Unknown checkout response is closed without claiming successful attendance', async () => {
+  const p=fake(); assert.equal(await execute(p,config,'check-out','true',credentials),'ALERT_ACKNOWLEDGED');
+  assert.equal(p.calls.ok,1); assert.equal(p.calls.attendance,1);
+});
+test('Native alert is acknowledged once', async () => {
+  const p=fake({native:true}); assert.equal(await execute(p,config,'check-out','true',credentials),'ALERT_ACKNOWLEDGED');
+  assert.equal(p.calls.ok,1); assert.equal(p.calls.attendance,1);
+});
+test('No alert / timeout does not cause a second attendance click', async () => {
+  const p=fake({timeout:true}); await assert.rejects(execute(p,config,'check-in','true',credentials));
+  assert.equal(p.calls.attendance,1);
+});
+test('An existing modal prevents a new attendance click', async () => {
+  const p=fake({existing:true}); await assert.rejects(execute(p,config,'check-in','true',credentials),/EXISTING_ALERT/);
+  assert.equal(p.calls.attendance,0);
 });

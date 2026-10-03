@@ -1,53 +1,57 @@
-# GAIO desde GitHub Actions
+# GAIO automático
 
-Automatización manual de acceso y asistencia con Playwright.
+## Horario activo
 
-## Estado actual
+De lunes a viernes, zona **America/Costa_Rica**:
 
-Se verificó en un navegador cloud el recorrido real: GAIO → Microsoft → SSO de Movate/CSS Corp → formulario de asistencia. El formulario vuelve a solicitar correo y contraseña y ofrece Check IN / Check Out. No se pulsó ninguno de esos botones.
-
-La prueba `inspect` está preparada. Las marcaciones siguen bloqueadas (`verified: false`) hasta identificar el mensaje o indicador real de éxito de cada acción. Todavía no se ha probado con credenciales en GitHub Actions ni se han configurado horarios.
-
-## Siguiente paso: dos secretos
-
-En este repositorio abre **Settings → Secrets and variables → Actions → New repository secret** y crea:
-
-| Nombre | Valor |
+| Acción | Hora |
 |---|---|
-| `GAIO_EMAIL` | Tu correo empresarial |
-| `GAIO_PASSWORD` | Tu contraseña empresarial |
+| Check In | 08:00 |
+| Check Out | 17:00 |
 
-Introduce los valores únicamente en los campos de secretos de GitHub. No los publiques como archivos, variables normales, issues o mensajes de chat. La sesión usada para inspeccionar el sitio en ChatGPT no se transfiere a GitHub.
+GitHub Actions ejecuta el flujo en la nube usando `GAIO_EMAIL` y `GAIO_PASSWORD` de los secretos del repositorio. Las ejecuciones programadas no requieren confirmación. El horario está definido en `.github/workflows/gaio.yml`; los horarios descriptivos y las exclusiones están en `schedule.json`.
 
-## Probar sin marcar
+## Qué hace
 
-Abre **Actions → GAIO → Run workflow**, elige `inspect` y deja la confirmación desmarcada.
+1. Comprueba si la fecha está habilitada.
+2. Completa el acceso corporativo Microsoft/Movate si es necesario.
+3. Introduce correo y contraseña en el formulario de asistencia.
+4. Pulsa una sola vez el botón correspondiente.
+5. Cierra la alerta con OK y termina.
 
-La prueba inicia sesión a través de las pantallas observadas y comprueba que aparezcan los dos campos y ambos botones. No envía el formulario de asistencia. `ACCESS_CONFIRMED` significa que llegó al formulario, no que haya registrado una entrada o salida ni que haya validado la contraseña contra el formulario final.
+Se admiten las alertas HTML de GAIO y alertas nativas del navegador. No hay reintentos automáticos. Un fallo técnico se registra como ejecución fallida. Una alerta cerrada se registra como `ALERT_ACKNOWLEDGED`; esto indica que se ejecutó el flujo, no certifica que GAIO haya aceptado la marcación. La alerta observada de entrada duplicada se registra como `ALREADY_CHECKED_IN`.
 
-Si Microsoft introduce MFA, consentimiento, selección de cuenta u otra pantalla nueva, la ejecución se detiene. No acepta esos pasos automáticamente. Un login fallido no se reintenta.
+No se imprimen contraseñas, correo, contenido completo de alertas ni capturas en los logs. Los secretos no están en el código.
 
-## Completar la verificación de marcaciones
+## Vacaciones, feriados y pausa
 
-Los identificadores del formulario ya están comprobados: `#txtEmpID`, `#txtpassword`, `#btncheckIn`, `#btncheckOut`.
+Cuando el usuario pida cambios, actualizar `schedule.json` en `main` antes de la siguiente ejecución:
 
-Falta observar qué aparece después de una marcación normal. Configura en `gaio.config.json` el `successSelector` específico de cada acción, que debe estar oculto antes y visible después. No uses una fecha o registro antiguo. Si el resultado es un diálogo JavaScript, habrá que adaptar el verificador. Solo entonces cambia `verified` a `true`.
+- `excludedDates`: fechas ISO `YYYY-MM-DD` que deben omitirse en ambas marcaciones.
+- `excludedRanges`: periodos con `from` y `to` en formato ISO, ambos inclusive.
+- `enabled: false`: pausa todas las marcaciones.
 
-Después, para una marcación manual desde el teléfono o la computadora: **Actions → GAIO → Run workflow → check-in/check-out** y marca la confirmación. El proceso se ejecuta en GitHub.
+No se excluyen feriados automáticamente: solo las fechas que indique el usuario. Las exclusiones también se respetan en ejecuciones manuales. No incluir motivos personales en el archivo. Para cambiar las horas, actualizar ambos cron del workflow, la función `scheduledAction` y los horarios descriptivos de `schedule.json`.
 
-No hay reintentos automáticos. Si falla después del clic, comprueba GAIO antes de repetir: el servidor puede haber recibido la marcación. La comprobación visual reduce duplicados, pero no garantiza idempotencia entre ejecuciones.
+Ejemplo de un periodo (solo ilustrativo, no configurado):
 
-## Credenciales y límites
+```json
+{"from":"2027-01-04","to":"2027-01-08"}
+```
 
-- No se imprimen credenciales, respuestas completas de la página, capturas ni trazas en los logs.
-- `GAIO_SESSION` es opcional para una sesión previamente exportada; no hace falta para intentar el acceso mediante los dos secretos.
-- `npm run login` sigue disponible como utilidad local opcional. Los archivos `.auth/` quedan excluidos de git.
-- La conexión desde GitHub tendrá la IP del runner; las políticas corporativas pueden tratarla de forma diferente.
-- Los permisos de escritura al repositorio permiten cambiar código que recibe secretos. Limita esos permisos.
-- Faltan acordar días y horas si se desea una programación futura.
+## Comprobación y ejecución manual
 
-## Desarrollo
+Actions → GAIO → Run workflow → `inspect` comprueba acceso sin marcar asistencia. Para ejecutar una marcación manual, seleccionar la acción y marcar la confirmación. La confirmación manual no aplica a los horarios programados.
 
-Node.js 24: `npm ci`, `npx playwright install chromium`, `npm test`. Las pruebas locales verifican las protecciones del código; no certifican acceso desde GitHub ni el resultado real de asistencia.
+Los push y pull requests solo ejecutan pruebas sin credenciales. No realizan marcaciones. Las repeticiones manuales de una ejecución programada se omiten para evitar repetirla accidentalmente.
 
-Referencias: [Playwright authentication](https://playwright.dev/docs/auth), [GitHub Actions manual workflows](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-running-a-workflow).
+## Verificado y límites
+
+- El acceso desde GitHub al formulario se comprobó con éxito en la ejecución 37089473371.
+- Se observó en el navegador el aviso `You have already checked IN for today!` y su botón OK.
+- Las pruebas locales cubren calendario, exclusiones, alertas y ausencia de reintentos. No se ha confirmado una nueva marcación exitosa de extremo a extremo.
+- GitHub puede retrasar o, en alta carga, perder ejecuciones programadas; no garantiza puntualidad exacta.
+- Al ser público este repositorio, GitHub puede desactivar la programación tras 60 días sin actividad del repositorio; revisar/re-habilitarla si ocurre. Los runs por sí solos no deben asumirse como actividad que evite esta regla.
+- Una nueva pantalla corporativa, MFA o un cambio de contraseña puede requerir actualización.
+
+Documentación: [GitHub schedule](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule), [Playwright dialogs](https://playwright.dev/docs/dialogs).
