@@ -1,0 +1,13 @@
+{
+  "name": "gaio-automation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "login": "node scripts/login.mjs",
+    "inspect": "node scripts/run.mjs inspect",
+    "test": "node --test"
+  },
+  "dependencies": { "playwright": "1.63.0" }
+}
