@@ -1,25 +1,15 @@
-name: GAIO
+name: GAIO access test
 on:
-  workflow_dispatch:
-    inputs:
-      action:
-        description: Acción
-        type: choice
-        options: [inspect, check-in, check-out]
-        default: inspect
-        required: true
-      confirm:
-        description: Confirmo ejecutar la marcación elegida
-        type: boolean
-        default: false
-        required: true
+  push:
+    branches: [codex/gaio-access-test]
+    paths: [.github/workflows/gaio.yml]
 permissions:
   contents: read
 concurrency:
   group: gaio-attendance
   cancel-in-progress: false
 jobs:
-  gaio:
+  inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -31,11 +21,10 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npx playwright install --with-deps chromium
-      - name: Ejecutar acción solicitada
+      - name: Comprobar acceso sin marcar asistencia
         env:
           GAIO_SESSION: ${{ secrets.GAIO_SESSION }}
           GAIO_EMAIL: ${{ secrets.GAIO_EMAIL }}
           GAIO_PASSWORD: ${{ secrets.GAIO_PASSWORD }}
-          GAIO_ACTION: ${{ inputs.action }}
-          CONFIRM_ACTION: ${{ inputs.confirm }}
-        run: node scripts/run.mjs "$GAIO_ACTION"
+          CONFIRM_ACTION: 'false'
+        run: node scripts/run.mjs inspect
